@@ -1,0 +1,15 @@
+*.ko
+*.ko.xz
+*.o
+*.mod
+*.mod.c
+*.mod.o
+*.order
+*.symvers
+*.cmd
+.tmp_versions/
+Module.symvers
+modules.order
+
+# build outputs from restore.sh
+/build/

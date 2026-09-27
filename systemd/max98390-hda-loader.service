@@ -1,0 +1,20 @@
+[Unit]
+Description=Load MAX98390 HDA modules and bind amplifiers (Bazzite)
+After=sound.target
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/max98390-hda-loader.sh
+StandardOutput=journal
+StandardError=journal
+# Required for insmod on SELinux-enforcing systems (Bazzite/Fedora)
+# /lib/modules is read-only on OSTree so we must use insmod directly
+CapabilityBoundingSet=CAP_SYS_MODULE
+AmbientCapabilities=CAP_SYS_MODULE
+# Also allow writing to sysfs for driver binding
+SecureBits=keep-caps
+
+[Install]
+WantedBy=multi-user.target

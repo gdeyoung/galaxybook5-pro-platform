@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=MAX98390 Speaker Fix
+Exec=sudo /usr/local/sbin/max98390-hda-boot.sh
+Hidden=false
+NoDisplay=true
+X-KDE-autostart-phase=1
