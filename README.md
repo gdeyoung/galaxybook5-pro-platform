@@ -12,9 +12,48 @@ upstream-support watcher, and a full inventory of what a configured machine look
 
 ---
 
+## 🐧 This is the Fedora/Bazzite version — see the upstream project for other distros
+
+**This repository is specifically the Fedora / Bazzite (immutable, OSTree) version.**
+
+> **Looking for Arch, CachyOS, Manjaro, Ubuntu, or Debian?**
+> Use **[`Andycodeman/samsung-galaxy-book-linux-fixes`](https://github.com/Andycodeman/samsung-galaxy-book-linux-fixes)
+> instead** — it is the upstream project this one derives from, and its installer already
+> detects your package manager and handles the Secure Boot MOK setup for all of them.
+> That is the right starting point for any non-Fedora system.
+
+The driver itself is identical — it's the same source, and it compiles anywhere with a
+matching kernel. What differs is the **installation**, and that's what this repo adds.
+
+`restore.sh` here is **Fedora-only by design.** It calls `rpm-ostree` and `rpm`, neither of
+which exists on Arch or Debian:
+
+```bash
+rpm -q dkms akmods alsa-tools          # Arch: no rpm
+rpm-ostree install ...                  # Arch: no rpm-ostree
+rpm-ostree kargs --append=...           # Arch: no kargs mechanism
+```
+
+It will fail on line 1. Don't try to adapt it — use the upstream installer, which was
+written to handle your distro, then come back here if you need the systemd loader
+improvement described in [Which boot path should I use?](#which-boot-path-should-i-use).
+
+**Also note:** the large section below about read-only `/lib/modules` errors, empty
+`/usr/src`, and `modinfo` failing on a working module is **specific to immutable/OSTree
+systems.** On Arch, `/lib/modules` is writable, DKMS installs cleanly, and none of those
+symptoms occur. They are documented here because on Fedora they look exactly like a broken
+install, and people waste hours on them.
+
+**One Arch-specific gotcha** (from upstream, not us): the Book5's built-in microphone needs
+SOF firmware, which Arch does not ship by default. If your mic doesn't work there:
+`sudo pacman -S sof-firmware`, then reboot. Speakers and mic are separate problems.
+
+---
+
 ## Table of contents
 
 - [Quick start](#quick-start)
+- [This is the Fedora/Bazzite version](#-this-is-the-fedora-bazzite-version)
 - [The problem, explained](#the-problem-explained)
 - [How the fix works](#how-the-fix-works)
 - [Requirements](#requirements)
@@ -36,6 +75,10 @@ upstream-support watcher, and a full inventory of what a configured machine look
 ---
 
 ## Quick start
+
+**Fedora / Bazzite only.** On Arch, Debian, Ubuntu, or anything else, use
+[the upstream installer](https://github.com/Andycodeman/samsung-galaxy-book-linux-fixes)
+instead — see [the note below](#-this-is-the-fedora-bazzite-version).
 
 ```bash
 git clone https://github.com/gdeyoung/galaxybook5-pro-platform.git
@@ -119,8 +162,8 @@ workaround automatically. See [Upstream support status](#upstream-support-status
 
 - **Hardware:** Galaxy Book5 Pro (DMI product name `960XHA`). Other Galaxy Book models use
   different amplifiers and need different fixes — see [Hardware reference](#hardware-reference).
-- **OS:** Bazzite / Fedora Atomic (or any OSTree-based immutable Fedora). Also works on
-  regular Fedora.
+- **OS:** Fedora / Bazzite only. This installer is RPM-based and will not run on Arch or
+  Debian — [use the upstream installer](#-this-is-the-fedora-bazzite-version) for those.
 - **Secure Boot:** if enabled, needs one-time MOK enrollment — see [Secure Boot](#secure-boot).
 
 ---
@@ -215,19 +258,27 @@ support has landed (below) and drop the workaround.
 
 ### Sound works, then dies after suspend/resume
 
-Known limitation of the driver version bundled here. Upstream added re-initialisation of
-the amplifiers after resume in September 2026 (commit `4bae1c2`, issue #98); the copy in this
-repository predates that commit. Update the driver source from upstream:
+**Fixed as of the driver version in this repo.** Hibernate powers the amplifiers off, losing
+every register written at probe — including the DSM tuning that makes the speakers sound
+right. Upstream added a `resume` PM callback (commit `4bae1c2`, issue #98) that re-runs the
+full init on resume/thaw/restore.
+
+The driver source here is current with upstream, so this is handled. If you installed before
+this repo was updated, pull the new source and rebuild:
 
 ```bash
-# replace source/max98390-hda-1.0/src/ with the newer upstream sources, then:
+git -C galaxybook5-pro-platform pull
 sudo dkms remove max98390-hda/1.0 --all
-sudo dkms add max98390-hda/1.0
+sudo dkms add  max98390-hda/1.0 -m max98390-hda -v 1.0
 sudo dkms build max98390-hda/1.0 -k $(uname -r)
 sudo reboot
 ```
 
-Until then, a reboot restores audio.
+Confirm it's active after reboot — you should see this in `dmesg`:
+
+```
+MAX98390 amp re-initialised on resume
+```
 
 ### Audio works, but not on the console / TTY
 
@@ -560,6 +611,10 @@ This repository exists because a community maintainer solved a real hardware pro
 - **Upstream driver work:** [thesofproject/linux PR #5616](https://github.com/thesofproject/linux/pull/5616) —
   the in-flight effort to get native support into mainline.
 - **Install script and immutable-image adaptations:** original to this repository.
+
+The driver source in `source/max98390-hda-1.0/` is kept **byte-identical to upstream**
+(current as of 2026-09-27, including the resume fix in commit `4bae1c2`). If you update
+upstream, update it here too — `md5sum` comparison is the fastest way to check drift.
 
 See [`ATTRIBUTION.md`](ATTRIBUTION.md) for the full provenance breakdown.
 

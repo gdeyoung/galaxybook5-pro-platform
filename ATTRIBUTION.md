@@ -15,6 +15,22 @@ That project in turn derives the driver from
 [thesofproject/linux PR #5616](https://github.com/thesofproject/linux/pull/5616), which
 remains unmerged upstream as of this writing.
 
+**Keeping it current.** The copy here is tracked against upstream `main` and was last synced
+**2026-09-27** (upstream commit `4bae1c2`, "Re-initialise MAX98390 amps after resume from
+hibernate"). To check for drift:
+
+```bash
+for f in source/max98390-hda-1.0/src/*; do
+  n=$(basename "$f")
+  curl -sS "https://raw.githubusercontent.com/Andycodeman/samsung-galaxy-book-linux-fixes/main/speaker-fix/src/$n" \
+    | diff -q - "$f" >/dev/null 2>&1 || echo "DRIFTED: $n"
+done
+```
+
+`restore.sh` intentionally installs the source **unmodified** — the immutable-image handling
+lives in the scripts around it, not in the driver. Keeping the driver byte-identical to
+upstream means upstream fixes arrive by re-copying, with no merge.
+
 If you fork or redistribute this, carry the GPL-2.0 license and this attribution forward.
 The driver is the copyrighted part; the scripts and documentation in this repository are
 the parts specific to running it on Bazzite.
