@@ -17,7 +17,8 @@ remains unmerged upstream as of this writing.
 
 **Keeping it current.** The copy here is tracked against upstream `main` and was last synced
 **2026-09-27** (upstream commit `4bae1c2`, "Re-initialise MAX98390 amps after resume from
-hibernate"). To check for drift:
+hibernate"). Re-verified **2026-10-18** against upstream `main` at `9d40c55` (v0.3.88):
+still byte-identical, no drift. To check for drift:
 
 ```bash
 for f in source/max98390-hda-1.0/src/*; do

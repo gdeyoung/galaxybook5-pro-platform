@@ -47,6 +47,32 @@ install, and people waste hours on them.
 **One Arch-specific gotcha** (from upstream, not us): the Book5's built-in microphone needs
 SOF firmware, which Arch does not ship by default. If your mic doesn't work there:
 `sudo pacman -S sof-firmware`, then reboot. Speakers and mic are separate problems.
+(Omarchy ships `sof-firmware` by default — mic worked out of the box for us.)
+
+### Field report: tested on Arch (Omarchy), 2026-10-18
+
+We moved this machine from Bazzite to **Omarchy 4.0.4** (Arch, kernel `7.2.8-9-omarchy`) and
+installed the fix there via **the upstream installer** — its native pacman path, not this
+repo's `restore.sh`. Working, with notes:
+
+```bash
+sudo pacman -S --needed dkms i2c-tools linux-omarchy-headers   # headers must match kernel
+git clone https://github.com/Andycodeman/samsung-galaxy-book-linux-fixes
+cd samsung-galaxy-book-linux-fixes
+sudo bash speaker-fix/install.sh --force
+```
+
+- **`--force` matters on a first install**: the installer's pre-check looks for existing
+  amp I2C devices, which do not exist until the driver runs once — chicken-and-egg.
+  `--force` skips the check and lets the setup service create the devices.
+- Result: DKMS `max98390-hda/1.0` built against the running kernel,
+  `max98390-hda-i2c-setup.service` active (`WantedBy=sound.target`), all four amps probe
+  (`0x38` via ACPI, `0x39/0x3c/0x3d` instantiated by the setup service), speakers work.
+- DKMS `AUTOINSTALL` rebuilds on every kernel update; `max98390-hda-check-upstream.service`
+  is armed to self-remove the whole thing when mainline support lands.
+- None of the OSTree "Errors that are NOT problems" below apply on Arch — `/lib/modules`
+  is writable, DKMS installs cleanly.
+- Still early days on this install: suspend/resume re-init not yet exercised there.
 
 ---
 
@@ -60,6 +86,7 @@ SOF firmware, which Arch does not ship by default. If your mic doesn't work ther
 - [What the installer does](#what-the-installer-does)
 - [Verifying it worked](#verifying-it-worked)
 - [Troubleshooting](#troubleshooting)
+  - [Speakers work, but 100% sounds quiet — the loudness ceiling](#speakers-work-but-100-sounds-quiet--the-loudness-ceiling)
 - [Errors that are NOT problems](#errors-that-are-not-problems)
   - [The read-only `/lib/modules` problem](#the-read-only-libmodules-problem)
   - [`/usr/src` is empty](#usrsrc-is-empty)
@@ -279,6 +306,44 @@ Confirm it's active after reboot — you should see this in `dmesg`:
 ```
 MAX98390 amp re-initialised on resume
 ```
+
+### Speakers work, but 100% sounds quiet — the loudness ceiling
+
+This is **expected behavior, not a bug** — the upstream project documents it too. Even with
+the driver working perfectly, Linux output at 100% is roughly 4–5 dB quieter than Windows.
+Two reasons:
+
+1. **Windows runs the Samsung Dolby stack** (loudness normalization + compression) that
+   Linux does not have. Windows is literally driving the amps harder.
+2. **The firmware tuning is conservative.** The DSM blobs the driver loads were extracted
+   from a Google *Redrix* Chromebook — same MAX98390 amps, different enclosure, tuned for
+   that chassis. Samsung's own blobs have never been extracted.
+
+**Software gain cannot fix it.** We measured this on the Omarchy machine (RMS at the
+speaker-sink monitor, sustained tones): LADSPA pre-gain of +3.5 dB produced **+1.5 dB** of
+output; a mixer gain of ×2.0 produced **−0.6 dB**; stream volume ×1.5 produced +0.4 dB.
+Non-monotonic — the amps' excursion-protection DSP enforces an output ceiling downstream
+of every software stage. Plain "just add gain" fixes are placebos on this hardware.
+(Corollary: sustained-tone A/B measurement is compromised on this machine; short bursts
+and ears are the instruments.)
+
+**What does land:** high-pass the sub-120 Hz energy the drivers cannot reproduce — that
+frees the amps' excursion budget — then feed a **lookahead limiter with input gain**. This
+is the same construction as the EasyEffects presets upstream ships
+(`speaker-fix/easyeffects-presets/GalaxyBook-Speakers-Warm-Loud.json`), which the community
+mic-validated at +4–5 dB of real loudness. We run it as a system-wide PipeWire stage:
+
+- [`gdeyoung/audiofx-engine`](https://github.com/gdeyoung/audiofx-engine) — PipeWire
+  filter-chain engine; its `loud` stage is exactly this (120 Hz HP → SWH
+  `fastLookaheadLimiter`, 0…+6 dB input gain, −1 dBFS ceiling).
+- [`gdeyoung/omarchy-audiofx`](https://github.com/gdeyoung/omarchy-audiofx) — the bar
+  panel that drives it.
+
+Ear-validated on a Book5 Pro 16": +6 dB is clearly audible with no distortion.
+
+> **Do not touch the DSM firmware blobs** (`*.bin` in the firmware path) to chase
+> loudness. They contain the speakers' excursion-protection limits; blind rewrites can
+> physically destroy these tiny drivers.
 
 ### Audio works, but not on the console / TTY
 

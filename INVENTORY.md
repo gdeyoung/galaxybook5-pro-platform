@@ -4,6 +4,11 @@ Host: `sammypro5` — Samsung Galaxy Book5 Pro (DMI `960XHA`, Intel Core Ultra 7
 OS: Bazzite (Fedora Atomic) 44.20260921, kernel `7.2.4-ogc3.1.fc44.x86_64`
 Inventoried: 2026-09-26
 
+> **This is the Bazzite-era record (historical).** The machine moved to Omarchy (Arch) on
+> 2026-10-15 and now uses upstream's installer — see the
+> [Omarchy-era addendum](#addendum-the-omarchy-era-inventoried-2026-10-18) at the bottom
+> for the current live state.
+
 This documents every local deviation from the stock Bazzite image: what it is, where it
 lives, why it exists, and what state it is actually in.
 
@@ -371,3 +376,37 @@ max98390-hda-check: upstream not available yet in 7.2.4-ogc3.1.fc44.x86_64
   right choice for MAX98390 I2C boards such as this one.
 - `topzyray/galaxybook-linux-setup` — the `hda-verb` workaround. Not used here; the DKMS
   driver supersedes it.
+
+---
+
+## Addendum: the Omarchy era (inventoried 2026-10-18)
+
+The machine left Bazzite on **2026-10-15** and now runs **Omarchy 4.0.4** (Arch, rolling,
+kernel `7.2.8-9-omarchy`, Hyprland/Wayland). Everything above is the Bazzite-era record —
+kept because it is the only public walkthrough of the immutable-image failure modes. The
+live mechanism is now simpler: **upstream's installer, native Arch path**, replacing the
+autostart/sudo loader entirely.
+
+Current audited state, verified 2026-10-18 (commands and real output):
+
+| Item | State |
+|------|-------|
+| DKMS | `max98390-hda/1.0, 7.2.8-9-omarchy, x86_64: installed` (AUTOINSTALL on kernel bumps) |
+| Kernel modules | `snd_hda_scodec_max98390`, `snd_hda_scodec_max98390_i2c` loaded |
+| Amp enumeration | `i2c-MAX98390:00` (0x38, ACPI) + `2-0039`, `2-003c`, `2-003d` (setup service) — kernel log shows 4 successful probes |
+| Units | `max98390-hda-i2c-setup.service` active/enabled (`WantedBy=sound.target`); `max98390-hda-check-upstream.service` enabled (oneshot, armed for mainline) |
+| Packages | `sof-firmware 2026.09.2-1` (mic, stock Omarchy), `swh-plugins 0.4.17-7` (LADSPA limiter — see below), `linux-omarchy-headers` matching the kernel |
+| Secure Boot | off — no MOK dance on this install |
+| Bazzite artifacts | all gone with the reinstall; nothing carried over |
+
+What changed beyond the driver — **loudness**. With speakers working, 100% volume was
+still ~4–5 dB quieter than Windows (documented expected behavior: no Samsung Dolby stack,
+Redrix-derived DSM tuning). Measured at the speaker monitor: every plain software gain
+mechanism is normalized away by the amps' protection DSP (details in the README's loudness
+ceiling section). The working remedy is a system-wide PipeWire stage — 120 Hz high-pass
+into a SWH `fastLookaheadLimiter` with 0…+6 dB input gain — shipped as
+[`gdeyoung/audiofx-engine`](https://github.com/gdeyoung/audiofx-engine) +
+[`gdeyoung/omarchy-audiofx`](https://github.com/gdeyoung/omarchy-audiofx), ear-validated
+2026-10-18 at +6 dB. `swh-plugins` is that stage's only extra package.
+
+Watch items on this install (young): first reboot early-load, suspend/resume re-init.
